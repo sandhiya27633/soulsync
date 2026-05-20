@@ -136,21 +136,31 @@ app.post('/api/chat', async (req, res) => {
       try {
         // Initialize Gemini SDK
         const ai = new GoogleGenerativeAI(geminiKey);
-        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-        // Build chat context
-        const chatSession = model.startChat({
+        const model = ai.getGenerativeModel({
+          model: "gemini-1.5-flash",
           generationConfig: {
             maxOutputTokens: 150,
-          },
-          systemInstruction: SOL_SYSTEM_PROMPT,
-          history: (history || []).map(msg => ({
-            role: msg.sender === 'user' ? 'user' : 'model',
-            parts: [{ text: msg.text }]
-          }))
+          }
         });
 
-        const result = await chatSession.sendMessage(message);
+        const historyContents = (history || []).map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text }]
+        }));
+
+        const requestContents = [
+          {
+            role: 'system',
+            parts: [{ text: SOL_SYSTEM_PROMPT }]
+          },
+          ...historyContents,
+          {
+            role: 'user',
+            parts: [{ text: message }]
+          }
+        ];
+
+        const result = await model.generateContent({ contents: requestContents });
         reply = result.response.text();
       } catch (geminiError) {
         console.error("Gemini API Error, falling back to mock response:", geminiError);
