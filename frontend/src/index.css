@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased select-none;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom Premium Glassmorphism */
+.glass-panel {
+  background: rgba(250, 250, 249, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+}
+
+.dark .glass-panel {
+  background: rgba(28, 25, 23, 0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* Card hover animation */
+.hover-card {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hover-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(167, 139, 250, 0.08);
+}
+
+.dark .hover-card:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Scrollbar styling for chat container */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(167, 139, 250, 0.25);
+  border-radius: 99px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(167, 139, 250, 0.5);
+}
+
+/* Breathing motion */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 4px 6px rgba(167, 139, 250, 0.15));
+  }
+  50% {
+    transform: scale(1.025);
+    filter: drop-shadow(0 10px 15px rgba(167, 139, 250, 0.25));
+  }
+}
+
+.animate-breathe {
+  animation: breathe 5s ease-in-out infinite;
+}
+
+/* Floating motion */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Ambient background blob rotation */
+@keyframes rotate-blob {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg);
+  }
+  33% {
+    transform: translate(30px, -50px) rotate(120deg);
+  }
+  66% {
+    transform: translate(-20px, 20px) rotate(240deg);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(360deg);
+  }
+}
+
+.animate-blob-slow {
+  animation: rotate-blob 25s infinite alternate linear;
+}
+
+.animate-blob-slower {
+  animation: rotate-blob 35s infinite alternate-reverse linear;
+}
