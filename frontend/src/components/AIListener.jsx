@@ -12,7 +12,10 @@ export const AIListener = () => {
   const [showCrisisModal, setShowCrisisModal] = useState(false);
   const [isAlertingContacts, setIsAlertingContacts] = useState(false);
   const [alertSuccessMessage, setAlertSuccessMessage] = useState('');
+  const [aiError, setAiError] = useState('');
   const chatEndRef = useRef(null);
+
+  const BACKEND_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || 'http://localhost:5000';
 
   // --- Keyboard Cadence Sensing State ---
   const typingStartRef = useRef(null);
@@ -84,14 +87,13 @@ export const AIListener = () => {
     // 2. Add user message locally and to DB
     // (Note: logChatMessage will handle encrypting it before writing to DB)
     await logChatMessage('user', messageText, 'NORMAL');
+    setAiError('');
     setIsLoading(true);
 
     // 3. Request AI Response from our backend API
     try {
-      const chatHistory = chats.slice(-10); // Keep last 10 messages for context
-      const backendUrl = 'http://localhost:5000'; // Make sure this matches Express port
-      
-      const response = await fetch(`${backendUrl}/api/chat`, {
+      const chatHistory = [...chats, { sender: 'user', text: messageText }].slice(-10);
+      const response = await fetch(`${BACKEND_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,27 +103,26 @@ export const AIListener = () => {
         })
       });
 
-      if (!response.ok) throw new Error("Server responded with error");
-      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server responded with ${response.status}: ${errorText}`);
+      }
+
       const data = await response.json();
-      
+      if (!data || typeof data.reply !== 'string') {
+        throw new Error('Invalid AI response format');
+      }
+
       // Save Sol's response
-      await logChatMessage('sol', data.reply, data.riskLevel);
-      
+      await logChatMessage('sol', data.reply, data.riskLevel || 'NORMAL');
+
       // If critical risk level detected, trigger the crisis alert modal!
       if (data.riskLevel === 'CRITICAL') {
         setShowCrisisModal(true);
       }
     } catch (error) {
-      console.error("AI Communication error, generating fallback response:", error);
-      // Client-side fallback if server is down or error occurs
-      const replies = [
-        "I'm here, and I'm listening. It sounds like you're carrying a lot right now.",
-        "Thank you for sharing that. I'm right here with you. What else is on your mind?",
-        "I want to support you. Let's take a slow breath. You are safe here."
-      ];
-      const randomReply = replies[Math.floor(Math.random() * replies.length)];
-      await logChatMessage('sol', randomReply, 'NORMAL');
+      console.error('AI Communication error:', error);
+      setAiError('Sol is temporarily unavailable. Please try again in a moment.');
     } finally {
       setIsLoading(false);
     }
@@ -138,7 +139,7 @@ export const AIListener = () => {
     setAlertSuccessMessage('');
 
     let sentCount = 0;
-    const backendUrl = 'http://localhost:5000';
+    const backendUrl = BACKEND_URL;
 
     try {
       for (const contact of user.safetyCircle) {
@@ -189,6 +190,12 @@ export const AIListener = () => {
           {isDemoMode ? 'Demo Mode' : 'AI Active'}
         </div>
       </div>
+
+      {aiError && (
+        <div class="px-6 py-3 bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-200 text-xs leading-relaxed">
+          {aiError}
+        </div>
+      )}
 
       {/* Messages Scroll Box */}
       <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">

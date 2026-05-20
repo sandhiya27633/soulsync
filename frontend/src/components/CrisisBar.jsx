@@ -14,7 +14,7 @@ export const CrisisBar = ({ setActiveTab }) => {
   if (!user) return null;
 
   const contacts = user.safetyCircle || [];
-  const backendUrl = 'http://localhost:5000';
+  const BACKEND_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || 'http://localhost:5000';
 
   const triggerAlert = async (type) => {
     if (contacts.length === 0) {
@@ -29,7 +29,7 @@ export const CrisisBar = ({ setActiveTab }) => {
     let sentCount = 0;
     try {
       for (const contact of contacts) {
-        const response = await fetch(`${backendUrl}/api/send-sms`, {
+        const response = await fetch(`${BACKEND_URL}/api/send-sms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
