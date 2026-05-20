@@ -9,6 +9,13 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+
+if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
+  console.warn('GEMINI_API_KEY is not configured, chat will run in demo mode with fallback responses only.');
+} else {
+  console.info('GEMINI_API_KEY loaded, Gemini production responses enabled.');
+}
 
 app.use(cors({
   origin: '*', // In production, replace with specific origins
@@ -137,6 +144,18 @@ function getMockEmpatheticResponse(message, riskLevel) {
   return genericFallbacks[seed];
 }
 
+function getCandidateText(candidate) {
+  if (!candidate || !candidate.content || !Array.isArray(candidate.content.parts)) {
+    return '';
+  }
+
+  return candidate.content.parts
+    .map(part => (part && part.text ? part.text : ''))
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+}
+
 // 1. AI Chat Endpoint
 app.post('/api/chat', async (req, res) => {
   try {
@@ -150,12 +169,12 @@ app.post('/api/chat', async (req, res) => {
     const { riskLevel, cadenceDistress } = analyzeRisk(message, cadence);
 
     let reply = '';
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const isGeminiEnabled = GEMINI_API_KEY && GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE';
 
-    if (geminiKey && geminiKey !== 'YOUR_GEMINI_API_KEY_HERE') {
+    if (isGeminiEnabled) {
       try {
         // Initialize Gemini SDK
-        const ai = new GoogleGenerativeAI(geminiKey);
+        const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = ai.getGenerativeModel({
           model: "gemini-1.5-flash",
           generationConfig: {
@@ -184,16 +203,27 @@ app.post('/api/chat', async (req, res) => {
         ];
 
         const result = await model.generateContent({ contents: requestContents });
-        if (!result?.response?.candidates?.length) {
+        const candidates = result?.response?.candidates || [];
+
+        if (!candidates.length) {
           throw new Error('Gemini returned no candidates');
         }
-        reply = result.response.text();
+
+        const selected = candidates[Math.floor(Math.random() * candidates.length)];
+        reply = getCandidateText(selected) || result.response.text();
+
+        if (!reply || !reply.trim()) {
+          throw new Error('Gemini returned empty text candidate');
+        }
       } catch (geminiError) {
-        console.error("Gemini API Error, falling back to mock response:", geminiError);
+        console.error('Gemini API Error, falling back to mock response:', geminiError);
+        if (geminiError && geminiError.stack) {
+          console.error(geminiError.stack);
+        }
         reply = getMockEmpatheticResponse(message, riskLevel);
       }
     } else {
-      // Demo Mode response
+      console.warn('GEMINI_API_KEY not available, using fallback demo response.');
       reply = getMockEmpatheticResponse(message, riskLevel);
     }
 
