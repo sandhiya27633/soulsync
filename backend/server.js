@@ -210,7 +210,13 @@ app.post('/api/chat', async (req, res) => {
         }
 
         const selected = candidates[Math.floor(Math.random() * candidates.length)];
-        reply = getCandidateText(selected) || result.response.text();
+        reply = getCandidateText(selected);
+
+        if (!reply) {
+          if (typeof result.response.text === 'function') {
+            reply = result.response.text();
+          }
+        }
 
         if (!reply || !reply.trim()) {
           throw new Error('Gemini returned empty text candidate');
@@ -231,7 +237,7 @@ app.post('/api/chat', async (req, res) => {
       reply: reply.trim(),
       riskLevel,
       cadenceDistress,
-      mode: geminiKey && geminiKey !== 'YOUR_GEMINI_API_KEY_HERE' ? 'production' : 'demo'
+      mode: isGeminiEnabled ? 'production' : 'demo'
     });
 
   } catch (error) {
@@ -312,5 +318,5 @@ app.post('/api/send-sms', async (req, res) => {
 // Start listening
 app.listen(PORT, () => {
   console.log(`SoulSync Backend listening on http://localhost:${PORT}`);
-  console.log(`Environment: ${process.env.GEMINI_API_KEY ? 'Production (AI Active)' : 'Demo Mode (Mock AI Active)'}`);
+  console.log(`Environment: ${GEMINI_API_KEY ? 'Production (AI Active)' : 'Demo Mode (Mock AI Active)'}`);
 });
