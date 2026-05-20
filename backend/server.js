@@ -19,11 +19,10 @@ app.use(cors({
 app.use(express.json());
 
 // System prompt for Sol
-const SOL_SYSTEM_PROMPT = `You are Sol, a warm, non-judgmental mental wellness companion. 
-Respond with empathy, short supportive messages (1-3 sentences max), and never give medical or professional advice. 
-Always show warmth and compassion. If the user expresses hopelessness, self-harm intent, or crisis language, 
-gently acknowledge their pain and ask if they'd like to reach out to someone they trust, and remind them that they are not alone.
-Never state you are a doctor, therapist, or medical professional. Keep the tone gentle and human-like.`;
+const SOL_SYSTEM_PROMPT = `You are Sol, a warm, non-judgmental mental wellness companion.
+Respond with empathy, emotional awareness, and context-specific support. Keep replies short and human (1-3 sentences), and never provide medical advice.
+If the user expresses hopelessness, self-harm intent, or crisis language, acknowledge their pain, validate their experience, and gently invite them to reach out to someone they trust or use their safety circle.
+Avoid repeating the same phrases from one response to the next. Reflect on the user's emotion and either mirror it or offer a calm next step. Stay grounded, gentle, and focused on the user's current message.`;
 
 // Sentiment Analysis Rules
 const CRITICAL_KEYWORDS = [
@@ -86,35 +85,56 @@ function analyzeRisk(message, cadence) {
 
 // Empathy Engine Fallback for Demo Mode (when Gemini API key is missing)
 function getMockEmpatheticResponse(message, riskLevel) {
-  const text = (message || '').toLowerCase();
-  
+  const trimmed = (message || '').trim();
+  const text = trimmed.toLowerCase();
+  const seed = Math.floor(Math.random() * 3);
+
   if (riskLevel === 'CRITICAL') {
-    return "I hear how much pain you're in, and I want you to know I'm listening. It sounds really heavy right now. Would it be okay to pause and reach out to someone you trust, or perhaps let me help you connect with your safety circle?";
+    return `I can hear how painful this is for you. It's okay to feel overwhelmed right now, and you don't have to carry it alone. Would you like to consider reaching out to someone trusted or your safety circle?`;
   }
-  
+
   if (text.includes('hello') || text.includes('hi ') || text.includes('hey')) {
-    return "Hello! I'm Sol, your self-care companion. How are you feeling in this moment?";
+    const replies = [
+      "Hello. I'm Sol, and I'm here to listen. What are you feeling most clearly right now?",
+      "Hi there. I'm glad you reached out. What's on your mind in this moment?",
+      "Hey. Thanks for sharing. How are you feeling at the moment?"
+    ];
+    return replies[seed];
   }
+
+  const reflections = [];
+
   if (text.includes('anxious') || text.includes('scared') || text.includes('panic')) {
-    return "I hear you. Feeling anxious can make everything feel overwhelming. Let's take a slow breath together if you're open to it. I'm right here with you.";
+    reflections.push(
+      "I can tell your body is on edge. Let's take a moment together and notice what feels the most overwhelming right now."
+    );
   }
   if (text.includes('tired') || text.includes('exhausted') || text.includes('sleep')) {
-    return "It sounds like your mind and body are carrying a lot. Please give yourself permission to rest. You've done enough for today.";
+    reflections.push(
+      "Your mind and body sound worn out. It may help to acknowledge that you've been carrying a lot today."
+    );
   }
   if (text.includes('lonely') || text.includes('alone')) {
-    return "I know it can feel really isolating, but I'm here, and I'm listening. Your presence matters to me, and we can just sit together for a while.";
+    reflections.push(
+      "Feeling alone can be so heavy. I'm here with you, and your experience matters."
+    );
   }
   if (text.includes('sad') || text.includes('cry') || text.includes('low')) {
-    return "I'm so sorry you're feeling down. It's completely okay to feel sad and cry. I'm sending you a warm, gentle hug. I'm here for you.";
+    reflections.push(
+      "That sounds really painful, and it's okay to feel that sadness. I'm here to hold space for you."
+    );
   }
-  
-  // Generic empathetic fallbacks
-  const fallbacks = [
-    "Thank you for sharing that with me. I'm here to listen without judgment. How are you holding up?",
-    "I'm here with you. Whatever you're going through, your feelings are valid. What would feel most supportive right now?",
-    "That sounds like a lot to carry. I'm listening, and I want to support you in any small way I can."
+
+  if (reflections.length > 0) {
+    return reflections[seed % reflections.length];
+  }
+
+  const genericFallbacks = [
+    `Thank you for sharing. I'm listening closely to what you wrote, and I want to support you without judgment.`,
+    `That sounds difficult. I'm here with you, and your feelings are valid. What feels most important to say next?`,
+    `I can hear that this matters deeply to you. I'm here to listen and stay with you through it.`
   ];
-  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+  return genericFallbacks[seed];
 }
 
 // 1. AI Chat Endpoint
@@ -140,6 +160,9 @@ app.post('/api/chat', async (req, res) => {
           model: "gemini-1.5-flash",
           generationConfig: {
             maxOutputTokens: 150,
+            temperature: 0.85,
+            topP: 0.95,
+            candidateCount: 3
           }
         });
 
@@ -161,6 +184,9 @@ app.post('/api/chat', async (req, res) => {
         ];
 
         const result = await model.generateContent({ contents: requestContents });
+        if (!result?.response?.candidates?.length) {
+          throw new Error('Gemini returned no candidates');
+        }
         reply = result.response.text();
       } catch (geminiError) {
         console.error("Gemini API Error, falling back to mock response:", geminiError);
