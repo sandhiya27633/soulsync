@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 import twilio from 'twilio';
 
 // Load environment variables
@@ -9,12 +9,12 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
-if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
-  console.warn('GEMINI_API_KEY is not configured, chat will run in demo mode with fallback responses only.');
+if (!GROQ_API_KEY || GROQ_API_KEY === 'YOUR_GROQ_API_KEY_HERE') {
+  console.warn('GROQ_API_KEY is not configured, chat will run in demo mode with fallback responses only.');
 } else {
-  console.info('GEMINI_API_KEY loaded, Gemini production responses enabled.');
+  console.info('GROQ_API_KEY loaded, Groq production responses enabled.');
 }
 
 app.use(cors({
@@ -144,18 +144,6 @@ function getMockEmpatheticResponse(message, riskLevel) {
   return genericFallbacks[seed];
 }
 
-function getCandidateText(candidate) {
-  if (!candidate || !candidate.content || !Array.isArray(candidate.content.parts)) {
-    return '';
-  }
-
-  return candidate.content.parts
-    .map(part => (part && part.text ? part.text : ''))
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-}
-
 // 1. AI Chat Endpoint
 app.post('/api/chat', async (req, res) => {
   try {
@@ -169,75 +157,71 @@ app.post('/api/chat', async (req, res) => {
     const { riskLevel, cadenceDistress } = analyzeRisk(message, cadence);
 
     let reply = '';
-    const isGeminiEnabled = GEMINI_API_KEY && GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE';
+    const isGroqEnabled = GROQ_API_KEY && GROQ_API_KEY !== 'YOUR_GROQ_API_KEY_HERE';
 
-    if (isGeminiEnabled) {
+    // Debug: log incoming request and mode
+    console.log('[DEBUG] /api/chat request:', { message: message && message.slice(0,200), historyLength: (history || []).length, isGroqEnabled });
+
+    if (isGroqEnabled) {
       try {
-        // Initialize Gemini SDK
-        const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = ai.getGenerativeModel({
-          model: "gemini-1.5-flash",
-          generationConfig: {
-            maxOutputTokens: 150,
-            temperature: 0.85,
-            topP: 0.95,
-            candidateCount: 3
-          }
-        });
+        // Initialize Groq SDK
+        const groq = new Groq({ apiKey: GROQ_API_KEY });
 
-        const historyContents = (history || []).map(msg => ({
-          role: msg.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.text }]
+        const historyMessages = (history || []).map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.text
         }));
 
-        const requestContents = [
-          {
-            role: 'system',
-            parts: [{ text: SOL_SYSTEM_PROMPT }]
-          },
-          ...historyContents,
+        const messages = [
+          ...historyMessages,
           {
             role: 'user',
-            parts: [{ text: message }]
+            content: message
           }
         ];
 
-        const result = await model.generateContent({ contents: requestContents });
-        const candidates = result?.response?.candidates || [];
+        const response = await groq.chat.completions.create({
+          messages: [
+            {
+              role: 'system',
+              content: SOL_SYSTEM_PROMPT
+            },
+            ...messages
+          ],
+          model: 'mixtral-8x7b-32768',
+          max_tokens: 150,
+          temperature: 0.85,
+          top_p: 0.95
+        });
 
-        if (!candidates.length) {
-          throw new Error('Gemini returned no candidates');
+        if (!response.choices || !response.choices.length) {
+          throw new Error('Groq returned no choices');
         }
 
-        const selected = candidates[Math.floor(Math.random() * candidates.length)];
-        reply = getCandidateText(selected);
-
-        if (!reply) {
-          if (typeof result.response.text === 'function') {
-            reply = result.response.text();
-          }
-        }
+        reply = response.choices[0]?.message?.content || '';
 
         if (!reply || !reply.trim()) {
-          throw new Error('Gemini returned empty text candidate');
+          throw new Error('Groq returned empty response');
         }
-      } catch (geminiError) {
-        console.error('Gemini API Error, falling back to mock response:', geminiError);
-        if (geminiError && geminiError.stack) {
-          console.error(geminiError.stack);
+      } catch (groqError) {
+        console.error('Groq API Error, falling back to mock response:', groqError);
+        if (groqError && groqError.stack) {
+          console.error(groqError.stack);
         }
         reply = getMockEmpatheticResponse(message, riskLevel);
+        console.log('[DEBUG] Falling back to mock response:', { reply });
       }
     } else {
-      console.warn('GEMINI_API_KEY not available, using fallback demo response.');
+      console.warn('GROQ_API_KEY not available, using fallback demo response.');
       reply = getMockEmpatheticResponse(message, riskLevel);
+      console.log('[DEBUG] Demo mode reply:', { reply });
     }
 
     res.json({
       reply: reply.trim(),
       riskLevel,
       cadenceDistress,
-      mode: isGeminiEnabled ? 'production' : 'demo'
+      mode: isGroqEnabled ? 'production' : 'demo'
     });
 
   } catch (error) {
@@ -318,5 +302,5 @@ app.post('/api/send-sms', async (req, res) => {
 // Start listening
 app.listen(PORT, () => {
   console.log(`SoulSync Backend listening on http://localhost:${PORT}`);
-  console.log(`Environment: ${GEMINI_API_KEY ? 'Production (AI Active)' : 'Demo Mode (Mock AI Active)'}`);
+  console.log(`Environment: ${GROQ_API_KEY ? 'Production (AI Active)' : 'Demo Mode (Mock AI Active)'}`);
 });

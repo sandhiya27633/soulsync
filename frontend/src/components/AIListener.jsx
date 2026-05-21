@@ -109,6 +109,7 @@ export const AIListener = () => {
       }
 
       const data = await response.json();
+      console.log('[DEBUG] /api/chat response', data);
       if (!data || typeof data.reply !== 'string') {
         throw new Error('Invalid AI response format');
       }
